@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>360 Floating Stone Logo</title>
+<style>
+  body { 
+    margin: 0; 
+    overflow: hidden; 
+    background: #FFFBF1;  /* backdrop */
+    cursor: grab;
+    touch-action: none;   /* Prevents default touch scrolling */
+  }
+  body:active { cursor: grabbing; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.158.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+
+// --- 1. SCENE SETUP ---
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xffffff); // White background
+
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+camera.position.z = 5;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(window.devicePixelRatio);
+document.body.appendChild(renderer.domElement);
+
+// --- 2. LIGHTING ---
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+scene.add(ambientLight);
+
+const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
+directionalLight.position.set(5, 10, 7);
+scene.add(directionalLight);
+
+// --- 3. LOAD OBJ WITH MTL ---
+let logo;
+const mtlLoader = new MTLLoader();
+mtlLoader.load('Stonelogo.mtl', (materials) => {
+  materials.preload();
+  const objLoader = new OBJLoader();
+  objLoader.setMaterials(materials);
+  objLoader.load('Stonelogo.obj', (object) => {
+
+    // Center the object
+    const box = new THREE.Box3().setFromObject(object);
+    const center = new THREE.Vector3();
+    box.getCenter(center);
+    object.position.sub(center);
+
+    // Optional: fix normals if needed
+    object.traverse((child) => {
+      if (child.isMesh) child.geometry.computeVertexNormals();
+    });
+
+    // Wrap in group for rotation
+    const group = new THREE.Group();
+    group.add(object);
+    scene.add(group);
+    logo = group;
+  });
+});
+
+// --- 4. DRAG & TOUCH ROTATION ---
+let isDragging = false;
+let previousPointer = { x: 0, y: 0 };
+let velocity = { x: 0, y: 0 };
+
+function onPointerDown(x, y) {
+  isDragging = true;
+  previousPointer = { x, y };
+}
+
+function onPointerMove(x, y) {
+  if (isDragging && logo) {
+    const deltaX = x - previousPointer.x;
+    const deltaY = y - previousPointer.y;
+
+    logo.rotation.y += deltaX * 0.01;
+    logo.rotation.x += deltaY * 0.01;
+
+    velocity.x = deltaX * 0.01;
+    velocity.y = deltaY * 0.01;
+  }
+  previousPointer = { x, y };
+}
+
+function onPointerUp() {
+  isDragging = false;
+}
+
+// Mouse events
+window.addEventListener('mousedown', (e) => onPointerDown(e.clientX, e.clientY));
+window.addEventListener('mousemove', (e) => onPointerMove(e.clientX, e.clientY));
+window.addEventListener('mouseup', onPointerUp);
+
+// Touch events
+window.addEventListener('touchstart', (e) => {
+  if (e.touches.length === 1) {
+    onPointerDown(e.touches[0].clientX, e.touches[0].clientY);
+  }
+});
+window.addEventListener('touchmove', (e) => {
+  if (e.touches.length === 1) {
+    onPointerMove(e.touches[0].clientX, e.touches[0].clientY);
+  }
+});
+window.addEventListener('touchend', onPointerUp);
+
+// --- 5. ZOOM SUPPORT ---
+// Mouse wheel zoom
+let zoomSpeed = 0.002;
+window.addEventListener('wheel', (e) => {
+  camera.position.z += e.deltaY * zoomSpeed;
+  camera.position.z = THREE.MathUtils.clamp(camera.position.z, 2, 15);
+});
+
+// Touch pinch zoom
+let prevTouchDist = null;
+window.addEventListener('touchmove', (e) => {
+  if (e.touches.length === 2) {
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+
+    if (prevTouchDist !== null) {
+      const delta = prevTouchDist - dist;
+      camera.position.z += delta * zoomSpeed * 0.5;
+      camera.position.z = THREE.MathUtils.clamp(camera.position.z, 2, 15);
+    }
+
+    prevTouchDist = dist;
+  } else {
+    prevTouchDist = null;
+  }
+});
+
+// --- 6. ANIMATION LOOP ---
+function animate() {
+  requestAnimationFrame(animate);
+
+  if (logo) {
+    // Floating effect
+    if (!isDragging) {
+      logo.position.y = Math.sin(Date.now() * 0.002) * 0.1;
+      logo.rotation.y += velocity.x;
+      logo.rotation.x += velocity.y;
+      velocity.x *= 0.95;
+      velocity.y *= 0.95;
+    }
+  }
+
+  renderer.render(scene, camera);
+}
+
+// --- 7. RESIZE HANDLER ---
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+animate();
+</script>
+</body>
+</html>
